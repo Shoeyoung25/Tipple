@@ -1,0 +1,28 @@
+# Fly.io config for Tipple.
+# `app` is set when you run `fly launch` (it must be globally unique).
+# Pick a region near most of your friends: https://fly.io/docs/reference/regions/
+app = "tipple"
+primary_region = "iad"
+
+[build]
+
+[env]
+  DATA_DIR = "/data"
+
+# Persistent storage for the SQLite DB + uploaded photos.
+# Create it once with:  fly volumes create tipple_data --size 1
+[[mounts]]
+  source = "tipple_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep the app always-on (don't sleep) so the link works 24/7.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

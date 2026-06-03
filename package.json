@@ -1,0 +1,28 @@
+{
+  "name": "tipple",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A Letterboxd-style beer & alcohol review archive for you and your friends.",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node server/index.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "NODE_ENV=production PORT=4000 node server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.1.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.1",
+    "tailwindcss": "^4.1.13",
+    "vite": "^6.3.6"
+  }
+}

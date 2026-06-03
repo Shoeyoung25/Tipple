@@ -1,0 +1,52 @@
+// Country list with flag emojis. Ordered roughly by relevance to beer/spirits,
+// then alphabetical. `flag()` falls back to a glass emoji for unknown values.
+export const COUNTRIES = [
+  { name: "Belgium", flag: "🇧🇪" },
+  { name: "Germany", flag: "🇩🇪" },
+  { name: "Czech Republic", flag: "🇨🇿" },
+  { name: "United Kingdom", flag: "🇬🇧" },
+  { name: "Ireland", flag: "🇮🇪" },
+  { name: "United States", flag: "🇺🇸" },
+  { name: "Netherlands", flag: "🇳🇱" },
+  { name: "France", flag: "🇫🇷" },
+  { name: "Italy", flag: "🇮🇹" },
+  { name: "Spain", flag: "🇪🇸" },
+  { name: "Portugal", flag: "🇵🇹" },
+  { name: "Mexico", flag: "🇲🇽" },
+  { name: "Japan", flag: "🇯🇵" },
+  { name: "China", flag: "🇨🇳" },
+  { name: "South Korea", flag: "🇰🇷" },
+  { name: "Australia", flag: "🇦🇺" },
+  { name: "New Zealand", flag: "🇳🇿" },
+  { name: "Canada", flag: "🇨🇦" },
+  { name: "Brazil", flag: "🇧🇷" },
+  { name: "Argentina", flag: "🇦🇷" },
+  { name: "Chile", flag: "🇨🇱" },
+  { name: "Scotland", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
+  { name: "Poland", flag: "🇵🇱" },
+  { name: "Austria", flag: "🇦🇹" },
+  { name: "Denmark", flag: "🇩🇰" },
+  { name: "Sweden", flag: "🇸🇪" },
+  { name: "Norway", flag: "🇳🇴" },
+  { name: "Finland", flag: "🇫🇮" },
+  { name: "Iceland", flag: "🇮🇸" },
+  { name: "Switzerland", flag: "🇨🇭" },
+  { name: "Russia", flag: "🇷🇺" },
+  { name: "India", flag: "🇮🇳" },
+  { name: "Thailand", flag: "🇹🇭" },
+  { name: "Vietnam", flag: "🇻🇳" },
+  { name: "Philippines", flag: "🇵🇭" },
+  { name: "Singapore", flag: "🇸🇬" },
+  { name: "South Africa", flag: "🇿🇦" },
+  { name: "Greece", flag: "🇬🇷" },
+  { name: "Hungary", flag: "🇭🇺" },
+  { name: "Cuba", flag: "🇨🇺" },
+  { name: "Jamaica", flag: "🇯🇲" },
+  { name: "Other", flag: "🌍" },
+];
+
+const FLAGS = Object.fromEntries(COUNTRIES.map((c) => [c.name, c.flag]));
+
+export function flag(country) {
+  return FLAGS[country] || "🥃";
+}
