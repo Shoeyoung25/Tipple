@@ -106,7 +106,6 @@ export default function ReviewForm() {
           ref={fileRef}
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={onPickFile}
           className="hidden"
         />
