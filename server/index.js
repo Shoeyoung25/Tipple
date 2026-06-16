@@ -21,10 +21,15 @@ const IS_PROD = process.env.NODE_ENV === "production";
 // dev fallback that matches the Vite proxy in vite.config.js.
 const PORT = process.env.PORT || 3001;
 
-// ---- Shared-password gate ------------------------------------------------
-// Password comes from $TIPPLE_PASSWORD or data/password.txt. If neither is set
-// the app stays open (handy for local-only dev). The auth cookie holds an HMAC
-// of the password, so it survives restarts and needs no session store.
+// ---- Authentication ------------------------------------------------------
+// Model: the user proves they know a shared password once (verified in
+// constant time), and the server then issues a stateless HMAC-SHA256-signed
+// token of the form  base64url(payload).base64url(signature)  carried in an
+// httpOnly cookie. The signing key (TIPPLE_SECRET) lives only on the server
+// and is never derived from the password. Every API request re-verifies the
+// signature in constant time and checks the embedded expiry. Zero session
+// state is kept server-side; rotating TIPPLE_SECRET invalidates every active
+// session.
 function loadPassword() {
   if (process.env.TIPPLE_PASSWORD) return process.env.TIPPLE_PASSWORD.trim();
   const file = join(DATA_DIR, "password.txt");
@@ -36,11 +41,76 @@ function loadPassword() {
 }
 const PASSWORD = loadPassword();
 const AUTH_REQUIRED = Boolean(PASSWORD);
-const COOKIE = "tipple_auth";
-const tokenFor = (pw) => createHmac("sha256", pw).update("tipple-auth-v1").digest("hex");
-const AUTH_TOKEN = AUTH_REQUIRED ? tokenFor(PASSWORD) : null;
 
-function safeEqual(a, b) {
+// Production must have both a password and a signing secret. Fail loudly
+// rather than silently boot in an insecure mode.
+if (IS_PROD && !AUTH_REQUIRED) {
+  console.error("FATAL: production requires TIPPLE_PASSWORD (or data/password.txt).");
+  process.exit(1);
+}
+if (IS_PROD && !process.env.TIPPLE_SECRET) {
+  console.error("FATAL: production requires TIPPLE_SECRET (a long random string).");
+  process.exit(1);
+}
+
+// SECRET is the HMAC key used to sign and verify tokens. In dev we fall back
+// to an ephemeral random key so the server boots without configuration —
+// cookies just won't survive a restart, which is the correct behavior when
+// no real secret has been provisioned.
+const SECRET = process.env.TIPPLE_SECRET
+  ? Buffer.from(process.env.TIPPLE_SECRET, "utf8")
+  : randomBytes(32);
+const SECRET_IS_EPHEMERAL = !process.env.TIPPLE_SECRET;
+
+const COOKIE = "tipple_auth";
+const TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 60; // 60 days
+
+// base64url (RFC 4648 §5) without padding.
+const toB64Url = (buf) =>
+  Buffer.from(buf)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+const fromB64Url = (s) =>
+  Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+const signPayload = (payloadB64) =>
+  createHmac("sha256", SECRET).update(payloadB64).digest();
+
+function issueToken() {
+  const now = Date.now();
+  const payload = toB64Url(JSON.stringify({ iat: now, exp: now + TOKEN_TTL_MS }));
+  const sig = toB64Url(signPayload(payload));
+  return `${payload}.${sig}`;
+}
+
+function verifyToken(token) {
+  if (typeof token !== "string") return false;
+  const dot = token.indexOf(".");
+  if (dot < 1 || dot === token.length - 1) return false;
+
+  const payloadB64 = token.slice(0, dot);
+  const sigB64 = token.slice(dot + 1);
+
+  let given;
+  try {
+    given = fromB64Url(sigB64);
+  } catch {
+    return false;
+  }
+  const expected = signPayload(payloadB64);
+  if (given.length !== expected.length) return false;
+  if (!timingSafeEqual(given, expected)) return false;
+
+  try {
+    const { exp } = JSON.parse(fromB64Url(payloadB64).toString("utf8"));
+    return typeof exp === "number" && exp > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function safePasswordEqual(a, b) {
   const ba = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
   return ba.length === bb.length && timingSafeEqual(ba, bb);
@@ -59,7 +129,7 @@ function readCookie(req, name) {
 function isAuthed(req) {
   if (!AUTH_REQUIRED) return true;
   const c = readCookie(req, COOKIE);
-  return c ? safeEqual(c, AUTH_TOKEN) : false;
+  return c ? verifyToken(c) : false;
 }
 
 function requireAuth(req, res, next) {
@@ -122,14 +192,14 @@ auth.get("/session", (req, res) => {
 auth.post("/login", (req, res) => {
   if (!AUTH_REQUIRED) return res.json({ authed: true });
   const password = String(req.body?.password || "");
-  if (!safeEqual(password, PASSWORD)) {
+  if (!safePasswordEqual(password, PASSWORD)) {
     return res.status(401).json({ error: "Wrong password" });
   }
-  res.cookie(COOKIE, AUTH_TOKEN, {
+  res.cookie(COOKIE, issueToken(), {
     httpOnly: true,
     sameSite: "lax",
     secure: IS_PROD, // Fly/Cloudflare terminate TLS; cookies should be HTTPS-only there.
-    maxAge: 1000 * 60 * 60 * 24 * 60, // 60 days
+    maxAge: TOKEN_TTL_MS,
     path: "/",
   });
   res.json({ authed: true });
@@ -200,7 +270,9 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`\n  🍺 Tipple server running`);
   console.log(`     local:   http://localhost:${PORT}`);
-  console.log(`     auth:    ${AUTH_REQUIRED ? "ON (shared password)" : "OFF (open — set data/password.txt)"}`);
+  console.log(`     auth:    ${AUTH_REQUIRED ? "ON (shared password + signed token)" : "OFF (open — set TIPPLE_PASSWORD or data/password.txt)"}`);
+  if (SECRET_IS_EPHEMERAL)
+    console.log(`     secret:  ephemeral (set TIPPLE_SECRET for persistent sessions)`);
   if (IS_PROD)
     console.log(`     network: http://<this-device-LAN-ip>:${PORT}  (share with friends)\n`);
   else console.log(`     (dev) open the Vite URL on :5173\n`);

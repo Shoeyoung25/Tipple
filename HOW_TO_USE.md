@@ -18,9 +18,11 @@ even when your computer is off.
 
 The app is protected by one shared password so only you and your friends can see it.
 
-- **Password:** `friends`
+- The password is whatever you last set via `fly secrets set TIPPLE_PASSWORD=…`.
+  Keep the current value somewhere private (1Password, Notes, etc.) — it is
+  intentionally **not written down in this repo**.
 - Everyone enters it **once** — it's remembered for 60 days on that device.
-- Send the link + password to friends so they can join in.
+- Send friends the link + the current password through a private channel.
 
 ---
 
@@ -50,10 +52,10 @@ each other's reviews apart.
 
 ## Sharing with friends
 
-Just send them two things:
+Just send them two things, through a private channel:
 
 1. The link: **https://tipple.fly.dev**
-2. The password: **friends**
+2. The current shared password (whatever you last set via `fly secrets`).
 
 That's it — it works from any country, on any phone or computer.
 
@@ -66,6 +68,7 @@ These are run from a terminal in the app folder (`cd ~/Desktop/BeerApp`).
 | What you want | Command |
 |---|---|
 | **Change the password** | `fly secrets set TIPPLE_PASSWORD="your-new-password"` (auto-redeploys) |
+| **Rotate the signing key** (kicks every device out, forces re-login) | `fly secrets set TIPPLE_SECRET="$(openssl rand -base64 32)"` |
 | **Publish changes** to the app | `fly deploy` |
 | **See live logs** | `fly logs` |
 | **Check status** | `fly status` |

@@ -31,15 +31,27 @@ Then on the same Wi-Fi, friends open `http://<your-device-ip>:4000`
 npm run dev     # Vite on :5173 + API on :3001 with hot reload
 ```
 
-## Shared password (for sharing beyond your home)
+## Authentication
 
-When the app is reachable from the internet (e.g. via a tunnel), it's protected
-by a single shared password that you give to your friends.
+A single shared-password gate — no accounts, no user table. After the password
+is entered once, the server issues a **stateless HMAC-SHA256-signed token**
+carried in an `httpOnly` cookie; every subsequent API request is verified in
+constant time (`crypto.timingSafeEqual`) and the embedded expiry is checked.
+No session state is stored server-side.
 
-- The password lives in `data/password.txt` (default: `friends`).
-- **Change it** by editing that file (or setting `TIPPLE_PASSWORD`) and
-  restarting the server.
-- Delete the file to disable the gate (only safe on a private LAN).
+Token format: `base64url(payload).base64url(HMAC-SHA256(SECRET, payload))`,
+where `payload = {iat, exp}` and `SECRET` lives only in `TIPPLE_SECRET`.
+
+Configure via two env vars (use `fly secrets set …` in production):
+
+- `TIPPLE_PASSWORD` — the shared password. Also accepted from
+  `data/password.txt` as a fallback for local self-hosting.
+- `TIPPLE_SECRET` — the HMAC signing key. Any long random string
+  (e.g. `openssl rand -base64 32`). Never derived from the password and never
+  committed. Rotating it invalidates every active session.
+
+Production refuses to boot without both values. On a private LAN you can omit
+the password to leave the app open.
 
 ## Share with friends in another country (Cloudflare Tunnel)
 
@@ -71,7 +83,10 @@ fly launch --no-deploy               # keep the existing Dockerfile + fly.toml
                                      # pick a UNIQUE app name + a region near friends
 
 fly volumes create tipple_data --size 1   # persistent storage for DB + photos
-fly secrets set TIPPLE_PASSWORD="friends"   # the shared password (change it!)
+fly secrets set \
+  TIPPLE_PASSWORD="$(openssl rand -base64 12)" \
+  TIPPLE_SECRET="$(openssl rand -base64 32)"
+# Reveal what was generated with: fly ssh console -C 'printenv TIPPLE_PASSWORD'
 
 fly deploy                           # build remotely + go live
 fly open                             # opens https://<your-app>.fly.dev
@@ -81,7 +96,8 @@ Notes:
 - **Cost:** the `.fly.dev` URL is free; a tiny always-on machine is ~$2–4/mo.
 - **Always-on:** `fly.toml` sets `min_machines_running = 1` / `auto_stop_machines = false`.
 - **Data persists** on the `tipple_data` volume across deploys and restarts.
-- **Change the password later:** `fly secrets set TIPPLE_PASSWORD="…"` (auto-redeploys).
+- **Rotate the password:** `fly secrets set TIPPLE_PASSWORD="…"` (auto-redeploys).
+- **Rotate the signing key** (kicks every device out): `fly secrets set TIPPLE_SECRET="$(openssl rand -base64 32)"`.
 - **Custom domain later (optional):** `fly certs add tipple.yourdomain.com`.
 
 Same `Dockerfile` runs on Railway, Render (paid disk), or any VM with Docker, if
