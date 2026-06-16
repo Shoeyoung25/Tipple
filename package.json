@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "A Letterboxd-style beer & alcohol review archive for you and your friends.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "node server/index.js",

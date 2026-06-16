@@ -79,7 +79,7 @@ You can also watch it in the dashboard: https://fly.io/apps/tipple/monitoring
 - **Your data is safe:** all reviews and photos are stored on a persistent cloud
   volume (`tipple_data`) and survive restarts and updates.
 - **Cost:** the URL + HTTPS are free; the tiny always-on machine is ~$2–4/month on
-  the card linked to your Fly.io account (`feishuyang1001@gmail.com`).
+  the card linked to your Fly.io account.
 
 ### Optional: a custom domain later
 If you ever want `tipple.yourdomain.com` instead of `tipple.fly.dev`:
