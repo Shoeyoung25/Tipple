@@ -29,6 +29,53 @@ db.exec(`
   )
 `);
 
+// Prepared statements are kept around for the lifetime of the process —
+// SQLite is fastest when prepares are re-used instead of re-parsed per call.
+const stmts = {
+  get: db.prepare("SELECT * FROM reviews WHERE id = ?"),
+  insert: db.prepare(
+    `INSERT INTO reviews (name, type, country, rating, review, reviewer, image)
+     VALUES ($name, $type, $country, $rating, $review, $reviewer, $image)`
+  ),
+  update: db.prepare(
+    `UPDATE reviews SET name=$name, type=$type, country=$country, rating=$rating,
+       review=$review, reviewer=$reviewer, image=COALESCE($image, image)
+     WHERE id=$id`
+  ),
+  delete: db.prepare("DELETE FROM reviews WHERE id = ?"),
+  count: db.prepare("SELECT COUNT(*) AS n FROM reviews"),
+  byCountry: db.prepare(
+    "SELECT country, COUNT(*) AS n, AVG(rating) AS avg FROM reviews GROUP BY country ORDER BY n DESC, country ASC"
+  ),
+  byType: db.prepare(
+    "SELECT type, COUNT(*) AS n FROM reviews GROUP BY type ORDER BY n DESC, type ASC"
+  ),
+  reviewers: db.prepare(
+    "SELECT reviewer, COUNT(*) AS n FROM reviews WHERE reviewer != '' GROUP BY reviewer ORDER BY n DESC"
+  ),
+};
+
+// listReviews builds SQL dynamically based on which filters are active. Cache
+// prepared statements keyed by the SQL string so each filter shape compiles
+// once and is reused for the lifetime of the process.
+const listCache = new Map();
+function prepareList(sql) {
+  let stmt = listCache.get(sql);
+  if (!stmt) {
+    stmt = db.prepare(sql);
+    listCache.set(sql, stmt);
+  }
+  return stmt;
+}
+
+const ORDER_BY = {
+  newest: "created_at DESC",
+  oldest: "created_at ASC",
+  rating: "rating DESC, created_at DESC",
+  lowest: "rating ASC, created_at DESC",
+  name: "name COLLATE NOCASE ASC",
+};
+
 export function listReviews({ country, type, reviewer, search, sort } = {}) {
   const where = [];
   const params = {};
@@ -49,51 +96,34 @@ export function listReviews({ country, type, reviewer, search, sort } = {}) {
     params.search = `%${search}%`;
   }
 
-  const orderBy =
-    {
-      newest: "created_at DESC",
-      oldest: "created_at ASC",
-      rating: "rating DESC, created_at DESC",
-      lowest: "rating ASC, created_at DESC",
-      name: "name COLLATE NOCASE ASC",
-    }[sort] || "created_at DESC";
-
+  const orderBy = ORDER_BY[sort] || ORDER_BY.newest;
   const sql =
     "SELECT * FROM reviews" +
     (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
     ` ORDER BY ${orderBy}`;
 
-  return db.prepare(sql).all(params);
+  return prepareList(sql).all(params);
 }
 
 export function getReview(id) {
-  return db.prepare("SELECT * FROM reviews WHERE id = ?").get(id);
+  return stmts.get.get(id);
 }
 
 export function createReview(r) {
-  const info = db
-    .prepare(
-      `INSERT INTO reviews (name, type, country, rating, review, reviewer, image)
-       VALUES ($name, $type, $country, $rating, $review, $reviewer, $image)`
-    )
-    .run({
-      name: r.name,
-      type: r.type,
-      country: r.country,
-      rating: r.rating,
-      review: r.review,
-      reviewer: r.reviewer,
-      image: r.image,
-    });
+  const info = stmts.insert.run({
+    name: r.name,
+    type: r.type,
+    country: r.country,
+    rating: r.rating,
+    review: r.review,
+    reviewer: r.reviewer,
+    image: r.image,
+  });
   return getReview(info.lastInsertRowid);
 }
 
 export function updateReview(id, r) {
-  db.prepare(
-    `UPDATE reviews SET name=$name, type=$type, country=$country, rating=$rating,
-       review=$review, reviewer=$reviewer, image=COALESCE($image, image)
-     WHERE id=$id`
-  ).run({
+  stmts.update.run({
     id,
     name: r.name,
     type: r.type,
@@ -107,26 +137,15 @@ export function updateReview(id, r) {
 }
 
 export function deleteReview(id) {
-  return db.prepare("DELETE FROM reviews WHERE id = ?").run(id);
+  return stmts.delete.run(id);
 }
 
 // Aggregates for the browse / filter UI.
 export function stats() {
-  const total = db.prepare("SELECT COUNT(*) AS n FROM reviews").get().n;
-  const byCountry = db
-    .prepare(
-      "SELECT country, COUNT(*) AS n, AVG(rating) AS avg FROM reviews GROUP BY country ORDER BY n DESC, country ASC"
-    )
-    .all();
-  const byType = db
-    .prepare(
-      "SELECT type, COUNT(*) AS n FROM reviews GROUP BY type ORDER BY n DESC, type ASC"
-    )
-    .all();
-  const reviewers = db
-    .prepare(
-      "SELECT reviewer, COUNT(*) AS n FROM reviews WHERE reviewer <> '' GROUP BY reviewer ORDER BY n DESC"
-    )
-    .all();
-  return { total, byCountry, byType, reviewers };
+  return {
+    total: stmts.count.get().n,
+    byCountry: stmts.byCountry.all(),
+    byType: stmts.byType.all(),
+    reviewers: stmts.reviewers.all(),
+  };
 }

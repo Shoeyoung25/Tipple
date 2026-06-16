@@ -16,7 +16,10 @@ import {
 } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || (process.env.NODE_ENV === "production" ? 3000 : 3001);
+const IS_PROD = process.env.NODE_ENV === "production";
+// Prod hosts (Fly, Docker, npm start) all set PORT explicitly; 3001 is the
+// dev fallback that matches the Vite proxy in vite.config.js.
+const PORT = process.env.PORT || 3001;
 
 // ---- Shared-password gate ------------------------------------------------
 // Password comes from $TIPPLE_PASSWORD or data/password.txt. If neither is set
@@ -125,6 +128,7 @@ auth.post("/login", (req, res) => {
   res.cookie(COOKIE, AUTH_TOKEN, {
     httpOnly: true,
     sameSite: "lax",
+    secure: IS_PROD, // Fly/Cloudflare terminate TLS; cookies should be HTTPS-only there.
     maxAge: 1000 * 60 * 60 * 24 * 60, // 60 days
     path: "/",
   });
@@ -178,11 +182,13 @@ api.get("/stats", (_req, res) => res.json(stats()));
 app.use("/api", api);
 
 // ---- Serve built frontend in production ----------------------------------
-if (process.env.NODE_ENV === "production") {
+if (IS_PROD) {
   const dist = join(__dirname, "..", "dist");
   if (existsSync(dist)) {
     app.use(express.static(dist));
     app.get("*", (_req, res) => res.sendFile(join(dist, "index.html")));
+  } else {
+    console.warn(`  ⚠  dist/ not found at ${dist} — run \`npm run build\` before starting in production.`);
   }
 }
 
@@ -195,7 +201,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`\n  🍺 Tipple server running`);
   console.log(`     local:   http://localhost:${PORT}`);
   console.log(`     auth:    ${AUTH_REQUIRED ? "ON (shared password)" : "OFF (open — set data/password.txt)"}`);
-  if (process.env.NODE_ENV === "production")
+  if (IS_PROD)
     console.log(`     network: http://<this-device-LAN-ip>:${PORT}  (share with friends)\n`);
   else console.log(`     (dev) open the Vite URL on :5173\n`);
 });

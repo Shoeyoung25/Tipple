@@ -6,6 +6,7 @@ import { TYPES } from "../lib/types.js";
 import { createReview, getReview, updateReview } from "../lib/api.js";
 
 const REVIEWER_KEY = "tipple:last-reviewer";
+const isObjectUrl = (url) => typeof url === "string" && url.startsWith("blob:");
 
 export default function ReviewForm() {
   const { id } = useParams();
@@ -47,11 +48,21 @@ export default function ReviewForm() {
     setForm((f) => ({ ...f, [key]: val }));
   }
 
+  // Revoke any leftover object URL when this view unmounts.
+  useEffect(() => {
+    return () => {
+      if (isObjectUrl(preview)) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
   function onPickFile(e) {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
-    setPreview(URL.createObjectURL(f));
+    setPreview((prev) => {
+      if (isObjectUrl(prev)) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(f);
+    });
   }
 
   async function submit(e) {
